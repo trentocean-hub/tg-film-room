@@ -40,6 +40,7 @@ Useful options:
 | `--camera-sync 12.4` | Tell it when you tapped Sync mark in the camera file, if the beep wasn't heard |
 | `--no-watermark` | Leave the TG monogram off |
 | `--no-nodes` | Plain background, no animated nodes |
+| `--cuts "0:12 me, 0:30 film, 0:45 split"` | Switch layouts at those times: `me` = you full screen, `film` = film full screen, `split` = side by side (the start). Each switch is a soft crossfade |
 
 ## Brand
 

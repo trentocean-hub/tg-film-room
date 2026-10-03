@@ -289,6 +289,51 @@ def animate_nodes(path, w, h, bands, seed=11, fps=OUT_FPS):
         die("Couldn't render the background nodes.")
 
 
+# ---------------------------------------------------------------- layout switches
+
+FADE = 0.6           # seconds for the crossfade between layouts (soft, never a hard cut)
+MODES = ("split", "me", "film")
+
+
+def parse_cuts(text):
+    """'0:12 me, 0:30 film, 1:05 split' -> [(12.0, 'me'), (30.0, 'film'), (65.0, 'split')]. Video starts in split."""
+    cuts = []
+    for part in text.replace(";", ",").split(","):
+        bits = part.split()
+        if not bits:
+            continue
+        if len(bits) != 2 or bits[1].lower() not in MODES:
+            die(f"Can't read '{part.strip()}' in --cuts. Use a time and one of {', '.join(MODES)}, like '0:12 me'.")
+        try:
+            secs = sum(float(x) * 60 ** i for i, x in enumerate(reversed(bits[0].split(":"))))
+        except ValueError:
+            die(f"Can't read the time '{bits[0]}' in --cuts. Use minutes:seconds, like 1:05.")
+        cuts.append((secs, bits[1].lower()))
+    return sorted(cuts)
+
+
+def weight_expr(cuts, mode):
+    """ffmpeg expression (of T) that is 1 while `mode` is on screen, 0 otherwise, with FADE-second ramps."""
+    spans, cur, start, prev = [], "split", 0.0, None
+    for t, m in cuts + [(1e9, None)]:
+        if m == cur:
+            continue
+        if cur == mode:
+            a_, b_ = start, t
+            # "me" sits under "film": when they swap directly, keep "me" fully up underneath the fade,
+            # so it goes straight from one to the other without the side-by-side ghosting through
+            if mode == "me" and prev == "film":
+                a_ -= FADE
+            if mode == "me" and m == "film":
+                b_ += FADE
+            spans.append((a_, b_))
+        prev, cur, start = cur, m, t
+    if not spans:
+        return None
+    terms = [f"clip((T-{a_:.3f})/{FADE}\\,0\\,1)-clip((T-{b_:.3f})/{FADE}\\,0\\,1)" for a_, b_ in spans]
+    return "+".join(terms)
+
+
 # ---------------------------------------------------------------- main
 
 def pick_inputs(folder):
@@ -313,6 +358,8 @@ def main():
     ap.add_argument("--no-border", action="store_true", help="no glow hairline around the face cam")
     ap.add_argument("--no-nodes", action="store_true", help="plain night background, no drifting nodes")
     ap.add_argument("--fast", action="store_true", help="use the Mac's hardware encoder (quicker, slightly bigger file)")
+    ap.add_argument("--cuts", help="switch layouts at these times, e.g. \"0:12 me, 0:30 film, 0:45 split\" "
+                                    "(me = you full screen, film = film full screen, split = side by side)")
     ap.add_argument("--preview", type=float, metavar="SECONDS", help="only render the first N seconds, to check the look")
     a = ap.parse_args()
 
@@ -436,12 +483,20 @@ def main():
               f"[{last}][an]overlay=0:0[la]"]
         last = "la"
     cam_ar = fw / fh
+    cuts = parse_cuts(a.cuts) if a.cuts else []
+    w_me, w_film = weight_expr(cuts, "me"), weight_expr(cuts, "film")
+    if w_me or w_film:
+        f += [f"[0:v]fps={OUT_FPS},crop={rw}:{rh}:{rx}:{ry},split=2[src0][src0b]",
+              f"[1:v]fps={OUT_FPS},split=2[src1][src1b]"]
+        s0, s1 = "[src0]", "[src1]"
+    else:
+        s0, s1 = f"[0:v]fps={OUT_FPS},crop={rw}:{rh}:{rx}:{ry},", f"[1:v]fps={OUT_FPS},"
     f += [
-        f"[0:v]fps={OUT_FPS},crop={rw}:{rh}:{rx}:{ry},scale={sw}:{sh}:flags=lanczos,setsar=1,format=rgba[clipr]",
+        f"{s0}scale={sw}:{sh}:flags=lanczos,setsar=1,format=rgba[clipr]",
         "[3:v]format=gray[fm]",
         "[clipr][fm]alphamerge[clip]",
         # camera: centre-crop to the panel's shape, scale, round the corners
-        f"[1:v]fps={OUT_FPS},crop='min(iw\\,ih*{cam_ar:.5f})':'min(ih\\,iw/{cam_ar:.5f})',scale={fw}:{fh}:flags=lanczos,setsar=1,format=rgba[camr]",
+        f"{s1}crop='min(iw\\,ih*{cam_ar:.5f})':'min(ih\\,iw/{cam_ar:.5f})',scale={fw}:{fh}:flags=lanczos,setsar=1,format=rgba[camr]",
         "[2:v]format=gray[m]",
         "[camr][m]alphamerge[cam]",
         f"[{last}][clip]overlay={sx}:{sy}:shortest=1[v0]",
@@ -450,6 +505,19 @@ def main():
     if b:
         f.append(f"[{last}][{bi}:v]overlay={fx - b}:{fy - b}[v1]"); last = "v1"
     f.append(f"[{last}][cam]overlay={fx}:{fy}:shortest=1[v2]"); last = "v2"
+    # full-screen layouts fade in over the side-by-side one, driven by a tiny mask whose brightness follows --cuts
+    for name, expr, src, fit in (("me", w_me, "[src1b]", "crop='min(iw\\,ih*16/9)':'min(ih\\,iw*9/16)',"),
+                                 ("film", w_film, "[src0b]", "")):
+        if not expr:
+            if w_me or w_film:
+                f.append(f"{src}nullsink")      # the other full-screen layout is in use; drop this unused copy
+            continue
+        f += [f"{src}{fit}scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase:flags=lanczos,"
+              f"crop={OUT_W}:{OUT_H},setsar=1,format=rgba[{name}r]",
+              f"color=c=black:s=16x16:r={OUT_FPS},format=gray,geq=lum='255*({expr})',scale={OUT_W}:{OUT_H}[{name}m]",
+              f"[{name}r][{name}m]alphamerge[{name}a]",
+              f"[{last}][{name}a]overlay=0:0:shortest=1[{name}o]"]
+        last = f"{name}o"
     if use_mono:
         mh = 48
         f.append(f"[{mi}:v]scale=-2:{mh}[mono]")
@@ -477,7 +545,8 @@ def main():
         die("ffmpeg couldn't render the video (see the messages above).")
 
     report = dict(screen=a.screen, camera=a.camera, screen_sync=round(s_sync, 3), camera_sync=round(c_sync, 3),
-                  rect=[rx, ry, rw, rh], duration=round(dur, 2), facecam=[fx, fy, fw, fh], film=[sx, sy, sw, sh])
+                  rect=[rx, ry, rw, rh], duration=round(dur, 2), facecam=[fx, fy, fw, fh], film=[sx, sy, sw, sh],
+                  cuts=cuts)
     with open(os.path.splitext(out)[0] + ".json", "w") as fh_:
         json.dump(report, fh_, indent=2)
     print(f"\nDone: {out}")
