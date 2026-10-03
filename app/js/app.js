@@ -1,6 +1,6 @@
 (() => {
   const $ = s => document.querySelector(s);
-  const video = $('#video'), stage = $('#stage'), wrap = $('#stageWrap');
+  const video = $('#video'), stage = $('#stage'), wrap = $('#stageWrap'), area = $('#stageArea');
   const court = $('#court'), draw = $('#draw'), cx = draw.getContext('2d'), kx = court.getContext('2d');
   const FPS = 30, FRAME = 1 / FPS;
   const NIGHT = 'rgba(14,21,17,0.64)';
@@ -12,7 +12,11 @@
 
   /* ---------- sizing ---------- */
   function fit() {
-    const r = wrap.getBoundingClientRect();
+    // wheel first (it sits in its own column beside the film), then the film fills what's left
+    const o = wrap.getBoundingClientRect();
+    const wd = Math.round(Math.max(130, Math.min(240, o.height * 0.42, o.width * 0.17))) + 'px';
+    wheelEl.style.width = wd; wheelEl.style.height = wd;
+    const r = area.getBoundingClientRect();
     let w = r.width, h = w / aspect;
     if (h > r.height) { h = r.height; w = h * aspect; }
     w = Math.floor(w); h = Math.floor(h);
@@ -20,8 +24,6 @@
     W = w; H = h; dpr = Math.min(window.devicePixelRatio || 1, 3);
     for (const c of [court, draw]) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
     cx.setTransform(dpr, 0, 0, dpr, 0, 0); kx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const wd = Math.floor(Math.min(w * 0.25, h * 0.33) * 0.92) + 'px';
-    wheelEl.style.width = wd; wheelEl.style.height = wd;
     drawCourt(); render();
   }
   const wheelEl = document.getElementById('wheel');

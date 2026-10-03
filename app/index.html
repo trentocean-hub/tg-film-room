@@ -37,16 +37,20 @@
   </header>
 
   <main class="stage-wrap" id="stageWrap">
+    <div class="stage-area" id="stageArea">
     <div class="stage" id="stage">
       <video id="video" playsinline webkit-playsinline preload="auto" muted></video>
       <canvas id="court"></canvas>
       <canvas id="draw"></canvas>
       <div class="empty" id="empty">
         <h1>Load a clip.<span>Then draw on the play.</span></h1>
-        <p>Up to 3 minutes. Pencil draws, the wheel scrubs. Try the tools on this court first.</p>
+        <p>Up to 3 minutes. Pencil draws, the wheel on the right scrubs. Try the tools on this court first.</p>
         <label class="btn" for="file2">Load clip<input type="file" id="file2" accept="video/*"></label>
       </div>
-      <div class="zone" id="zone" aria-label="Face cam area">
+      <div class="flash" id="flash"></div>
+    </div>
+    </div>
+    <div class="dock">
         <div class="wheel" id="wheel">
           <svg viewBox="0 0 200 200" aria-hidden="true">
             <circle cx="100" cy="100" r="97" fill="rgba(22,31,26,.88)" stroke="rgba(238,231,216,.16)" stroke-width="1.5" class="rim"/>
@@ -54,8 +58,6 @@
           </svg>
           <button class="hub" id="hub">Play</button>
         </div>
-      </div>
-      <div class="flash" id="flash"></div>
     </div>
   </main>
 

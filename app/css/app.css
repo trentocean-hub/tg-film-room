@@ -1,4 +1,4 @@
-/* Layout: one-screen telestrator. Top bar, 16:9 stage (face-cam zone bottom right holds the jog wheel), bottom tool bar.
+/* Layout: one-screen telestrator. Top bar, 16:9 stage with the jog wheel docked beside it (never on the film), bottom tool bar.
    Brand: Evergreen (single dark look by design, per the brand guide). */
 :root{
   --ground:#0E1511; --raised:#161F1A; --forest:#24402F; --glow:#8CC4A4;
@@ -28,7 +28,8 @@ button[aria-pressed="true"]{background:var(--forest);border-color:rgba(140,196,1
 button.ghost{background:transparent}
 .sw{width:12px;height:12px;border-radius:50%;display:inline-block}
 .btn input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
-.stage-wrap{position:relative;min-height:0;min-width:0;overflow:hidden;display:grid;place-items:center}
+.stage-wrap{position:relative;min-height:0;min-width:0;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--space-3)}
+.stage-area{min-width:0;min-height:0;display:grid;place-items:center}
 .stage{position:relative;background:#0a0f0c;border:1px solid var(--hair);border-radius:4px;overflow:hidden}
 .stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .stage video{object-fit:contain;background:#000}
@@ -38,8 +39,8 @@ button.ghost{background:transparent}
 .empty h1 span{display:block;color:var(--ink-muted)}
 .empty p{margin:0;color:var(--ink-muted);font-size:13px}
 .empty .btn{pointer-events:auto;margin-top:6px;background:var(--forest)}
-.zone{position:absolute;right:2%;bottom:3%;width:25%;height:33%;border:1px dashed rgba(238,231,216,.10);border-radius:14px;display:grid;place-items:center;pointer-events:none}
-.wheel{position:relative;pointer-events:auto;touch-action:none}
+.dock{display:flex;align-items:flex-end;justify-content:center}
+.wheel{position:relative;touch-action:none}
 .wheel svg{width:100%;height:100%;display:block}
 .wheel .hub{position:absolute;left:50%;top:50%;width:40%;height:40%;transform:translate(-50%,-50%);border-radius:50%;
   background:var(--ground);border:1px solid var(--hair);color:var(--ink);font:500 12px/1 var(--sans);padding:0;min-height:0;justify-content:center}

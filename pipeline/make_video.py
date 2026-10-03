@@ -5,9 +5,9 @@ TG Film Room: turn an iPad screen recording + a camera recording into one brande
 What it does
   1. Finds the Sync mark beep in both recordings and lines them up.
   2. Finds the video area in the screen recording (the Sync mark flashes exactly that area).
-  3. Crops the screen recording to the clip, scales it to 1920x1080 on the night ground.
-  4. Puts your camera in a rounded frame exactly where the jog wheel sits (covering it).
-  5. Adds the TG monogram, uses your camera's audio, evens out loudness, exports an MP4.
+  3. Lays out a 1920x1080 frame: you on the left, the whole film on the right, both with rounded corners,
+     on the night ground with slowly drifting forest-glow nodes behind them.
+  4. Adds the TG monogram, uses your camera's audio, evens out loudness, exports an MP4.
 
 Needs only Python 3 and ffmpeg (brew install ffmpeg). No other packages.
 
@@ -21,6 +21,7 @@ import array
 import json
 import math
 import os
+import random
 import shutil
 import subprocess
 import sys
@@ -32,8 +33,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 NIGHT = "0x0E1511"
 GLOW_RGB = (140, 196, 164)
 
-# Must match app/css/app.css (.zone): right 2%, bottom 3%, width 25%, height 33% of the stage
-ZONE = dict(right=0.02, bottom=0.03, width=0.25, height=0.33)
+# Layout: margin, gap between the two panels, face-cam shape (width / height), corner radius
+MARGIN, GAP, CAM_AR, RADIUS = 64, 40, 3 / 4, 18
 
 OUT_W, OUT_H, OUT_FPS = 1920, 1080, 30
 SYNC_SKIP = 0.5          # seconds after the beep where the final video starts (cuts the flash out)
@@ -160,6 +161,41 @@ def make_png(path, w, h, r, rgb=None):
     run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", src, "-frames:v", "1", path])
 
 
+# ---------------------------------------------------------------- background nodes
+
+def make_nodes(path, w, h, seed, count, link, dot, dot_a, line_a):
+    """Gray PGM of forest-glow nodes (dots joined by faint lines). Used as an alpha mask over the glow colour."""
+    rnd = random.Random(seed)
+    img = array.array("f", bytes(4 * w * h))
+
+    def splat(x, y, a):
+        ix, iy = int(x), int(y); fx, fy = x - ix, y - iy
+        for dx, dy, k in ((0, 0, (1 - fx) * (1 - fy)), (1, 0, fx * (1 - fy)), (0, 1, (1 - fx) * fy), (1, 1, fx * fy)):
+            px_, py_ = ix + dx, iy + dy
+            if 0 <= px_ < w and 0 <= py_ < h:
+                img[py_ * w + px_] += a * k
+
+    pts = [(rnd.uniform(0, w), rnd.uniform(0, h), rnd.uniform(0.45, 1.0)) for _ in range(count)]
+    for i, (x1, y1, _) in enumerate(pts):
+        for x2, y2, _ in pts[i + 1:]:
+            d = math.hypot(x2 - x1, y2 - y1)
+            if d < link:
+                a = line_a * (1 - d / link)
+                for j in range(int(d) + 1):
+                    t = j / max(1, d); splat(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, a)
+    for x, y, k in pts:
+        r = dot * k
+        for yy in range(int(y - r - 2), int(y + r + 3)):
+            for xx in range(int(x - r - 2), int(x + r + 3)):
+                if 0 <= xx < w and 0 <= yy < h:
+                    e = r + 0.5 - math.hypot(xx - x, yy - y)       # soft-edged disc
+                    if e > 0:
+                        img[yy * w + xx] += dot_a * k * min(1.0, e)
+    with open(path, "wb") as f:
+        f.write(b"P5\n%d %d\n255\n" % (w, h))
+        f.write(bytes(min(255, int(v * 255)) for v in img))
+
+
 # ---------------------------------------------------------------- main
 
 def pick_inputs(folder):
@@ -182,6 +218,7 @@ def main():
     ap.add_argument("--rect", help="video area in the screen recording as x,y,w,h, if it isn't found")
     ap.add_argument("--no-watermark", action="store_true", help="leave the TG monogram off")
     ap.add_argument("--no-border", action="store_true", help="no glow hairline around the face cam")
+    ap.add_argument("--no-nodes", action="store_true", help="plain night background, no drifting nodes")
     ap.add_argument("--fast", action="store_true", help="use the Mac's hardware encoder (quicker, slightly bigger file)")
     ap.add_argument("--preview", type=float, metavar="SECONDS", help="only render the first N seconds, to check the look")
     a = ap.parse_args()
@@ -238,24 +275,34 @@ def main():
     if dur <= 1:
         die("Less than a second of overlap after the Sync mark. Check you sent the right two files.")
 
-    # Fit the stage into 1920x1080
-    scale = min(OUT_W / rw, OUT_H / rh)
-    sw, sh = int(rw * scale) // 2 * 2, int(rh * scale) // 2 * 2
-    sx, sy = (OUT_W - sw) // 2, (OUT_H - sh) // 2
-
-    # Face cam lands on the jog wheel zone
-    fw = int(sw * ZONE["width"]) // 2 * 2
-    fh = int(sh * ZONE["height"]) // 2 * 2
-    fx = sx + sw - int(sw * ZONE["right"]) - fw
-    fy = sy + sh - int(sh * ZONE["bottom"]) - fh
-    radius = max(8, int(fh * 0.08))
+    # Layout: camera panel (CAM_AR) on the left, the whole film on the right, same height, centred
+    film_ar = rw / rh
+    ph = int((OUT_W - 2 * MARGIN - GAP) / (CAM_AR + film_ar)) // 2 * 2
+    ph = min(ph, OUT_H - 2 * MARGIN)
+    fw, fh = int(ph * CAM_AR) // 2 * 2, ph                     # face cam
+    sw, sh = int(ph * film_ar) // 2 * 2, ph                    # film
+    total = fw + GAP + sw
+    fx = (OUT_W - total) // 2 // 2 * 2
+    sx = fx + fw + GAP
+    fy = sy = (OUT_H - ph) // 2 // 2 * 2
     b = 0 if a.no_border else 3
 
     tmp = tempfile.mkdtemp(prefix="tgfilm-")
-    mask = os.path.join(tmp, "mask.png"); make_png(mask, fw, fh, radius)
+    cam_mask = os.path.join(tmp, "cam-mask.png"); make_png(cam_mask, fw, fh, RADIUS)
+    film_mask = os.path.join(tmp, "film-mask.png"); make_png(film_mask, sw, sh, RADIUS)
     border = os.path.join(tmp, "border.png")
     if b:
-        make_png(border, fw + 2 * b, fh + 2 * b, radius + b, GLOW_RGB)
+        make_png(border, fw + 2 * b, fh + 2 * b, RADIUS + b, GLOW_RGB)
+
+    # two node layers drifting at different speeds (far: small and dim, near: brighter, linked)
+    layers = []
+    if not a.no_nodes:
+        print("Drawing the background nodes...")
+        for name, amp, seed, count, link, dot, dot_a, line_a in (("far", 40, 7, 130, 170, 1.8, 0.50, 0.12),
+                                                                 ("near", 90, 33, 50, 320, 3.4, 1.0, 0.32)):
+            pth = os.path.join(tmp, name + ".pgm")
+            make_nodes(pth, OUT_W + 2 * amp, OUT_H + 2 * amp, seed, count, link, dot, dot_a, line_a)
+            layers.append((pth, amp))
 
     mono = os.path.join(HERE, "assets", "tg-monogram.png")
     use_mono = not a.no_watermark and os.path.exists(mono)
@@ -266,31 +313,44 @@ def main():
     cmd = ["ffmpeg", "-v", "error", "-stats", "-y",
            "-ss", f"{s_start:.3f}", "-i", a.screen,
            "-ss", f"{c_start:.3f}", "-i", a.camera,
-           "-loop", "1", "-i", mask]
-    idx = 3
+           "-loop", "1", "-i", cam_mask, "-loop", "1", "-i", film_mask]
+    idx = 4
     if b:
         cmd += ["-loop", "1", "-i", border]; bi = idx; idx += 1
     if use_mono:
         cmd += ["-loop", "1", "-i", mono]; mi = idx; idx += 1
+    li = []
+    for pth, _ in layers:
+        cmd += ["-loop", "1", "-framerate", str(OUT_FPS), "-i", pth]; li.append(idx); idx += 1
 
+    f = [f"color=c={NIGHT}:s={OUT_W}x{OUT_H}:r={OUT_FPS}[bg]"]
+    last = "bg"
+    for n, ((_, amp), i) in enumerate(zip(layers, li)):
+        px_, py_ = (83, 107) if n == 0 else (59, 71)          # seconds per drift cycle (slow, never in step)
+        f += [f"[{i}:v]crop={OUT_W}:{OUT_H}:x='{amp}+{amp}*sin(2*PI*t/{px_})':y='{amp}+{amp}*cos(2*PI*t/{py_})',format=gray[a{n}]",
+              f"color=c=0x{GLOW_RGB[0]:02X}{GLOW_RGB[1]:02X}{GLOW_RGB[2]:02X}:s={OUT_W}x{OUT_H}:r={OUT_FPS},format=rgba[g{n}]",
+              f"[g{n}][a{n}]alphamerge[n{n}]",
+              f"[{last}][n{n}]overlay=0:0[l{n}]"]
+        last = f"l{n}"
     cam_ar = fw / fh
-    f = [
-        f"color=c={NIGHT}:s={OUT_W}x{OUT_H}:r={OUT_FPS}[bg]",
-        f"[0:v]fps={OUT_FPS},crop={rw}:{rh}:{rx}:{ry},scale={sw}:{sh}:flags=lanczos,setsar=1[clip]",
-        "[bg][clip]overlay=" + f"{sx}:{sy}:shortest=1[v0]",
-        # camera: centre-crop to the zone's shape, scale, round the corners
+    f += [
+        f"[0:v]fps={OUT_FPS},crop={rw}:{rh}:{rx}:{ry},scale={sw}:{sh}:flags=lanczos,setsar=1,format=rgba[clipr]",
+        "[3:v]format=gray[fm]",
+        "[clipr][fm]alphamerge[clip]",
+        # camera: centre-crop to the panel's shape, scale, round the corners
         f"[1:v]fps={OUT_FPS},crop='min(iw\\,ih*{cam_ar:.5f})':'min(ih\\,iw/{cam_ar:.5f})',scale={fw}:{fh}:flags=lanczos,setsar=1,format=rgba[camr]",
         "[2:v]format=gray[m]",
         "[camr][m]alphamerge[cam]",
+        f"[{last}][clip]overlay={sx}:{sy}:shortest=1[v0]",
     ]
     last = "v0"
     if b:
         f.append(f"[{last}][{bi}:v]overlay={fx - b}:{fy - b}[v1]"); last = "v1"
     f.append(f"[{last}][cam]overlay={fx}:{fy}:shortest=1[v2]"); last = "v2"
     if use_mono:
-        mh = 56
+        mh = 48
         f.append(f"[{mi}:v]scale=-2:{mh}[mono]")
-        f.append(f"[{last}][mono]overlay={sx + 40}:{sy + 40}[v3]"); last = "v3"
+        f.append(f"[{last}][mono]overlay={fx}:{(fy - mh) // 2}[v3]"); last = "v3"
     f.append(f"[{last}]format=yuv420p[vout]")
 
     a_src = "1:a" if a.audio == "camera" else "0:a"
@@ -314,7 +374,7 @@ def main():
         die("ffmpeg couldn't render the video (see the messages above).")
 
     report = dict(screen=a.screen, camera=a.camera, screen_sync=round(s_sync, 3), camera_sync=round(c_sync, 3),
-                  rect=[rx, ry, rw, rh], duration=round(dur, 2), facecam=[fx, fy, fw, fh])
+                  rect=[rx, ry, rw, rh], duration=round(dur, 2), facecam=[fx, fy, fw, fh], film=[sx, sy, sw, sh])
     with open(os.path.splitext(out)[0] + ".json", "w") as fh_:
         json.dump(report, fh_, indent=2)
     print(f"\nDone: {out}")
