@@ -25,7 +25,7 @@ Trenton Gibson's film-breakdown tools. Trenton is a pro basketball player (#33, 
 - Type: Cormorant Garamond 500 for titles, Inter 400/500 for everything else. No third family.
 - Copy: sentence case, a player talking to players, direct and calm. Short first line, quieter second line. No tracked capitals, no code-style labels, no emoji, no icon packs.
 - Motion: "seed, then materialize" – forest-glow particles gather (1.6–2.0 s) then settle (1.8–2.4 s); text fades in from an 8px blur over 1.2 s. No snaps, bounces, zooms or whooshes. (The Sync mark flash is a production marker that the pipeline cuts out; it never reaches the final video.)
-- Logos: TG monogram (`app/assets/tg-monogram.png`) for watermarks and small spaces. Bone on night/forest/plum/oxblood only, no effects.
+- Logos: face portrait (`app/assets/tg-portrait.png`) in the app top bar; TG monogram (`pipeline/assets/tg-monogram.png`) for the video watermark. Bone on night/forest/plum/oxblood only, no effects.
 
 ## Running things
 

@@ -21,11 +21,8 @@
 <div class="app" id="app">
   <header class="bar top">
     <div class="brand">
-      <img alt="TG" src="assets/tg-monogram.png">
-      <div style="min-width:0">
-        <div class="t1">Film room</div>
-        <div class="t2" id="clipName">No clip loaded</div>
-      </div>
+      <img alt="Trenton Gibson" src="assets/tg-portrait.png">
+      <div class="t2" id="clipName">No clip loaded</div>
     </div>
     <div class="group">
       <label class="btn" for="file">Load clip<input type="file" id="file" accept="video/*"></label>
@@ -35,6 +32,7 @@
       <button id="sp50" data-rate=".5">0.5×</button>
       <button id="sp100" data-rate="1" aria-pressed="true">1×</button>
       <button id="mute" aria-pressed="false">Clip sound off</button>
+      <button id="full" hidden>Full screen</button>
     </div>
   </header>
 
@@ -64,8 +62,6 @@
   <footer class="bar">
     <div class="group" role="group" aria-label="Tools">
       <button data-tool="pen" aria-pressed="true">Pen</button>
-      <button data-tool="path">Cut path</button>
-      <button data-tool="pass">Pass</button>
       <button data-tool="ring">Ring</button>
       <button data-tool="spot">Spotlight</button>
     </div>

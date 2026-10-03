@@ -52,14 +52,6 @@
   const baseW = () => Math.max(2.5, W * 0.0042);
   const px = p => ({ x: p.x * W, y: p.y * H });
 
-  function arrowHead(x, y, ang, size, col) {
-    cx.fillStyle = col; cx.beginPath();
-    cx.moveTo(x + Math.cos(ang) * size * .35, y + Math.sin(ang) * size * .35);
-    cx.lineTo(x - Math.cos(ang - .45) * size, y - Math.sin(ang - .45) * size);
-    cx.lineTo(x - Math.cos(ang + .45) * size, y - Math.sin(ang + .45) * size);
-    cx.closePath(); cx.fill();
-  }
-
   function strokePts(pts, col) {
     if (!pts.length) return;
     cx.strokeStyle = col; cx.lineCap = 'round'; cx.lineJoin = 'round';
@@ -75,22 +67,10 @@
     }
   }
 
-  function tailAngle(pts) {
-    const P = pts.map(px), end = P[P.length - 1];
-    for (let i = P.length - 2; i >= 0; i--) if (Math.hypot(end.x - P[i].x, end.y - P[i].y) > baseW() * 4) return Math.atan2(end.y - P[i].y, end.x - P[i].x);
-    return P.length > 1 ? Math.atan2(end.y - P[0].y, end.x - P[0].x) : 0;
-  }
-
   function drawAnn(a) {
     const w = baseW();
-    if (a.t === 'pen' || a.t === 'path') {
+    if (a.t === 'pen') {
       strokePts(a.pts, a.c);
-      if (a.t === 'path' && a.pts.length > 2) { const e = px(a.pts[a.pts.length - 1]); arrowHead(e.x, e.y, tailAngle(a.pts), w * 4.2, a.c); }
-    } else if (a.t === 'pass') {
-      const s = px(a.a), e = px(a.b), ang = Math.atan2(e.y - s.y, e.x - s.x);
-      cx.strokeStyle = a.c; cx.lineWidth = w; cx.lineCap = 'round'; cx.setLineDash([w * 2.6, w * 2.2]);
-      cx.beginPath(); cx.moveTo(s.x, s.y); cx.lineTo(e.x - Math.cos(ang) * w * 2.5, e.y - Math.sin(ang) * w * 2.5); cx.stroke(); cx.setLineDash([]);
-      arrowHead(e.x, e.y, ang, w * 4.2, a.c);
     } else if (a.t === 'ring') {
       const c = px(a.a), rx = a.r * W;
       cx.strokeStyle = a.c; cx.lineWidth = w * 1.15;
@@ -146,7 +126,7 @@
     e.preventDefault(); draw.setPointerCapture(e.pointerId);
     const p = norm(e);
     cur = { t: tool, c: color, id: e.pointerId };
-    if (tool === 'pen' || tool === 'path') cur.pts = [p];
+    if (tool === 'pen') cur.pts = [p];
     else { cur.a = p; cur.b = p; cur.r = 0; }
     render();
   });
@@ -291,6 +271,19 @@
     const f = $('#flash'); f.classList.add('on'); setTimeout(() => f.classList.remove('on'), 200);
   });
 
+  /* ---------- full screen (Safari only; the Home Screen app is already full screen) ---------- */
+  const app = $('#app'), fullBtn = $('#full');
+  const standalone = navigator.standalone || matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches;
+  const canFull = app.requestFullscreen || app.webkitRequestFullscreen;
+  const isFull = () => document.fullscreenElement || document.webkitFullscreenElement;
+  fullBtn.hidden = standalone || !canFull;
+  fullBtn.addEventListener('click', () => {
+    if (isFull()) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else canFull.call(app);
+  });
+  const onFull = () => { fullBtn.textContent = isFull() ? 'Exit full screen' : 'Full screen'; };
+  document.addEventListener('fullscreenchange', onFull); document.addEventListener('webkitfullscreenchange', onFull);
+
   /* ---------- tools ---------- */
   document.querySelectorAll('[data-tool]').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('[data-tool]').forEach(x => x.setAttribute('aria-pressed', 'false'));
@@ -305,7 +298,7 @@
   $('#autoclear').addEventListener('click', e => { const on = e.currentTarget.getAttribute('aria-pressed') !== 'true'; e.currentTarget.setAttribute('aria-pressed', String(on)); });
 
   /* ---------- keyboard (laptop) ---------- */
-  const toolKeys = { '1': 'pen', '2': 'path', '3': 'pass', '4': 'ring', '5': 'spot' };
+  const toolKeys = { '1': 'pen', '2': 'ring', '3': 'spot' };
   document.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' && e.target.type !== 'range') return;
     if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
