@@ -1,0 +1,6 @@
+.DS_Store
+pipeline/input/*
+pipeline/output/*
+!pipeline/input/.gitkeep
+!pipeline/output/.gitkeep
+__pycache__/

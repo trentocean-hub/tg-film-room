@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>TG Film Room</title>
+<meta name="theme-color" content="#0E1511">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Film Room">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icon-180.png">
+<link rel="icon" type="image/png" href="assets/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500&family=Inter:wght@400;500&display=swap">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="app" id="app">
+  <header class="bar top">
+    <div class="brand">
+      <img alt="TG" src="assets/tg-monogram.png">
+      <div style="min-width:0">
+        <div class="t1">Film room</div>
+        <div class="t2" id="clipName">No clip loaded</div>
+      </div>
+    </div>
+    <div class="group">
+      <label class="btn" for="file">Load clip<input type="file" id="file" accept="video/*"></label>
+      <button id="sync" title="Tap once at the start of every take. The edit lines up your camera with this.">Sync mark</button>
+      <span class="sep"></span>
+      <button id="sp25" data-rate=".25">0.25×</button>
+      <button id="sp50" data-rate=".5">0.5×</button>
+      <button id="sp100" data-rate="1" aria-pressed="true">1×</button>
+      <button id="mute" aria-pressed="false">Clip sound off</button>
+    </div>
+  </header>
+
+  <main class="stage-wrap" id="stageWrap">
+    <div class="stage" id="stage">
+      <video id="video" playsinline webkit-playsinline preload="auto" muted></video>
+      <canvas id="court"></canvas>
+      <canvas id="draw"></canvas>
+      <div class="empty" id="empty">
+        <h1>Load a clip.<span>Then draw on the play.</span></h1>
+        <p>Up to 3 minutes. Pencil draws, the wheel scrubs. Try the tools on this court first.</p>
+        <label class="btn" for="file2">Load clip<input type="file" id="file2" accept="video/*"></label>
+      </div>
+      <div class="zone" id="zone" aria-label="Face cam area">
+        <div class="wheel" id="wheel">
+          <svg viewBox="0 0 200 200" aria-hidden="true">
+            <circle cx="100" cy="100" r="97" fill="rgba(22,31,26,.88)" stroke="rgba(238,231,216,.16)" stroke-width="1.5" class="rim"/>
+            <g id="ticks"></g>
+          </svg>
+          <button class="hub" id="hub">Play</button>
+        </div>
+      </div>
+      <div class="flash" id="flash"></div>
+    </div>
+  </main>
+
+  <footer class="bar">
+    <div class="group" role="group" aria-label="Tools">
+      <button data-tool="pen" aria-pressed="true">Pen</button>
+      <button data-tool="path">Cut path</button>
+      <button data-tool="pass">Pass</button>
+      <button data-tool="ring">Ring</button>
+      <button data-tool="spot">Spotlight</button>
+    </div>
+    <span class="sep"></span>
+    <div class="group" role="group" aria-label="Colour">
+      <button data-color="#8CC4A4" aria-pressed="true"><span class="sw" style="background:#8CC4A4"></span>Glow</button>
+      <button data-color="#EEE7D8"><span class="sw" style="background:#EEE7D8"></span>Bone</button>
+      <button data-color="#D9A0A6"><span class="sw" style="background:#D9A0A6"></span>Mistake</button>
+    </div>
+    <span class="sep"></span>
+    <div class="group">
+      <button id="undo">Undo</button>
+      <button id="clear">Clear</button>
+      <button id="autoclear" aria-pressed="true" title="Clear the drawings when the clip plays again">Clear on play</button>
+    </div>
+    <div class="scrub">
+      <input type="range" id="seek" min="0" max="1000" step="1" value="0" aria-label="Position in clip">
+      <span class="time" id="time"><b>0:00.00</b> / 0:00</span>
+    </div>
+  </footer>
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
