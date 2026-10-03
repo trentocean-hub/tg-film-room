@@ -4,9 +4,10 @@
   const court = $('#court'), draw = $('#draw'), cx = draw.getContext('2d'), kx = court.getContext('2d');
   const FPS = 30, FRAME = 1 / FPS;
   const NIGHT = 'rgba(14,21,17,0.64)';
+  const HALO = 'rgba(14,21,17,0.72)';   // dark edge under every mark so it reads on bright or busy film
 
   let W = 0, H = 0, dpr = 1, aspect = 16 / 9;
-  let tool = 'pen', color = '#8CC4A4';
+  let tool = 'pen', color = '#A4F2C4';
   let anns = [], history = [], cur = null, penSeen = false, fade = 1, hasClip = false;
 
   /* ---------- sizing ---------- */
@@ -52,10 +53,10 @@
   const baseW = () => Math.max(2.5, W * 0.0042);
   const px = p => ({ x: p.x * W, y: p.y * H });
 
-  function strokePts(pts, col) {
+  function strokePts(pts, col, extra = 0) {
     if (!pts.length) return;
     cx.strokeStyle = col; cx.lineCap = 'round'; cx.lineJoin = 'round';
-    const P = pts.map(p => ({ ...px(p), w: baseW() * (0.55 + (p.p ?? .5) * 0.9) }));
+    const P = pts.map(p => ({ ...px(p), w: baseW() * (0.55 + (p.p ?? .5) * 0.9) + extra }));
     if (P.length === 1) { cx.fillStyle = col; cx.beginPath(); cx.arc(P[0].x, P[0].y, P[0].w / 2, 0, Math.PI * 2); cx.fill(); return; }
     let prev = P[0];
     for (let i = 1; i < P.length; i++) {
@@ -67,17 +68,17 @@
     }
   }
 
-  function drawAnn(a) {
-    const w = baseW();
+  function drawAnn(a, halo) {
+    const w = baseW(), col = halo ? HALO : a.c, extra = halo ? w * 1.4 : 0;
     if (a.t === 'pen') {
-      strokePts(a.pts, a.c);
+      strokePts(a.pts, col, extra);
     } else if (a.t === 'ring') {
       const c = px(a.a), rx = a.r * W;
-      cx.strokeStyle = a.c; cx.lineWidth = w * 1.15;
+      cx.strokeStyle = col; cx.lineWidth = w * 1.15 + extra;
       cx.beginPath(); cx.ellipse(c.x, c.y, rx, rx * 0.38, 0, 0, Math.PI * 2); cx.stroke();
     } else if (a.t === 'spot') {
       const c = px(a.a), r = a.r * W;
-      cx.strokeStyle = a.c; cx.lineWidth = w * .9;
+      cx.strokeStyle = col; cx.lineWidth = w * .9 + extra;
       cx.beginPath(); cx.arc(c.x, c.y, r, 0, Math.PI * 2); cx.stroke();
     }
   }
@@ -92,6 +93,7 @@
       for (const s of spots) { const c = px(s.a); cx.moveTo(c.x + s.r * W, c.y); cx.arc(c.x, c.y, s.r * W, 0, Math.PI * 2); }
       cx.fill('evenodd');
     }
+    for (const a of list) drawAnn(a, true);
     for (const a of list) drawAnn(a);
     cx.globalAlpha = 1;
   }
@@ -185,8 +187,9 @@
   wheel.addEventListener('pointerdown', e => {
     if (e.target === hub) return;
     e.preventDefault(); wheel.setPointerCapture(e.pointerId);
-    if (!video.paused) video.pause();
-    jog = { id: e.pointerId, a: angleOf(e), t: performance.now(), pos: video.currentTime || 0 };
+    const wasPlaying = !video.paused;
+    if (wasPlaying) video.pause();
+    jog = { id: e.pointerId, a: angleOf(e), t: performance.now(), pos: video.currentTime || 0, wasPlaying };
     wheel.classList.add('active');
   });
   wheel.addEventListener('pointermove', e => {
@@ -201,7 +204,15 @@
     jog.a = a; jog.t = now; rot += d; setRot();
     seekTo(jog.pos);
   });
-  const endJog = e => { if (jog && jog.id === e.pointerId) { jog = null; wheel.classList.remove('active'); } };
+  let resuming = false;
+  const endJog = e => {
+    if (!jog || jog.id !== e.pointerId) return;
+    const resume = jog.wasPlaying; jog = null; wheel.classList.remove('active');
+    if (!resume) return;
+    // tape was playing when you grabbed the wheel: keep playing from where you let go
+    const go = () => { if (seeking || target !== null) return setTimeout(go, 30); resuming = true; video.play().catch(() => {}); };
+    go();
+  };
   wheel.addEventListener('pointerup', endJog); wheel.addEventListener('pointercancel', endJog);
   hub.addEventListener('click', () => togglePlay());
 
@@ -210,7 +221,7 @@
     if (!hasClip) return;
     if (video.paused) video.play().catch(() => {}); else video.pause();
   }
-  video.addEventListener('play', () => { hub.textContent = 'Pause'; if ($('#autoclear').getAttribute('aria-pressed') === 'true') clearAll(true); tick(); });
+  video.addEventListener('play', () => { hub.textContent = 'Pause'; if (!resuming && $('#autoclear').getAttribute('aria-pressed') === 'true') clearAll(true); resuming = false; tick(); });
   video.addEventListener('pause', () => { hub.textContent = 'Play'; updateTime(); });
   video.addEventListener('ended', () => { hub.textContent = 'Play'; });
 
