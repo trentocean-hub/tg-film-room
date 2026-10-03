@@ -35,7 +35,7 @@ Trenton Gibson's film-breakdown tools. Trenton is a pro basketball player (#33, 
 
 ## Ideas on the list
 
-- Branded intro and end card using the particle "materialize" motion (Remotion is a good fit; Trenton has a `cc remotion draft` folder).
+- Branded intro and end card using the particle "materialize" motion. Options: Nate Herk's HyperFrames kit (https://github.com/nateherkai/hyperframes-student-kit, already used in `~/Desktop/Euroleague Picks/Euroleague Logos`) or Remotion (Trenton has a `cc remotion draft` folder).
 - Captions burned in from the camera audio.
 - Telestration that follows a moving player.
 - Saving a breakdown's drawings per clip.
