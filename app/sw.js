@@ -1,6 +1,6 @@
 // Offline cache so the app opens from the Home Screen without a connection.
 // Bump VERSION whenever you change app files, so iPads pick up the new version.
-const VERSION = 'film-room-v4';
+const VERSION = 'film-room-v5';
 const FILES = ['./', 'index.html', 'css/app.css', 'js/app.js', 'manifest.webmanifest',
   'assets/tg-portrait.png', 'assets/icon-180.png', 'assets/icon-192.png', 'assets/icon-512.png'];
 

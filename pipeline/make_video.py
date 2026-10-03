@@ -6,7 +6,8 @@ What it does
   1. Finds the Sync mark beep in both recordings and lines them up.
   2. Finds the video area in the screen recording (the Sync mark flashes exactly that area).
   3. Lays out a 1920x1080 frame: you on the left, the whole film on the right, both with rounded corners,
-     on the night ground with slowly drifting forest-glow nodes behind them.
+     on the night ground. Behind them, forest-glow nodes keep gathering into small constellations,
+     linking up, then dissolving or dropping to the bottom of the frame (plus a faint drifting dust layer).
   4. Adds the TG monogram, uses your camera's audio, evens out loudness, exports an MP4.
 
 Needs only Python 3 and ffmpeg (brew install ffmpeg). No other packages.
@@ -34,7 +35,7 @@ NIGHT = "0x0E1511"
 GLOW_RGB = (140, 196, 164)
 
 # Layout: margin, gap between the two panels, face-cam shape (width / height), corner radius
-MARGIN, GAP, CAM_AR, RADIUS = 64, 40, 3 / 4, 18
+MARGIN, GAP, CAM_AR, RADIUS = 40, 32, 9 / 16, 18      # 9:16 = a phone filming upright
 
 OUT_W, OUT_H, OUT_FPS = 1920, 1080, 30
 SYNC_SKIP = 0.5          # seconds after the beep where the final video starts (cuts the flash out)
@@ -196,6 +197,98 @@ def make_nodes(path, w, h, seed, count, link, dot, dot_a, line_a):
         f.write(bytes(min(255, int(v * 255)) for v in img))
 
 
+NODE_LOOP = 24.0     # seconds; the constellation animation repeats seamlessly after this
+
+
+def animate_nodes(path, w, h, bands, seed=11, fps=OUT_FPS):
+    """Render a seamless loop of node constellations as a gray mask video (half resolution, scaled up later).
+    Each constellation: gathers from scattered points (2 s, brand "seed, then materialize"), links up,
+    drifts gently, then either dissolves outward or drops to the bottom of the frame, and stays gone a while.
+    bands: list of (y0, y1) strips (in w x h pixels) where the constellations settle, i.e. the visible background."""
+    rnd = random.Random(seed)
+    L, n_clusters = NODE_LOOP, 8
+    clusters = []
+    for k in range(n_clusters):
+        y0, y1 = bands[k % len(bands)]
+        cw, ch = rnd.uniform(0.16, 0.26) * w, max(12.0, min(0.85 * (y1 - y0), 0.16 * h))
+        cxk = rnd.uniform(0.08 * w, 0.97 * w - cw)          # 8% keeps the TG mark clear
+        cyk = rnd.uniform(y0, max(y0, y1 - ch))
+        nodes = []
+        for _ in range(rnd.randint(10, 16)):
+            tx, ty = cxk + rnd.uniform(0, cw), cyk + rnd.uniform(0, ch)
+            ang, dist = rnd.uniform(0, 2 * math.pi), rnd.uniform(0.06, 0.14) * w
+            nodes.append(dict(tx=tx, ty=ty, sx=tx + math.cos(ang) * dist, sy=ty + math.sin(ang) * dist,
+                              r=rnd.uniform(1.1, 2.0), b=rnd.uniform(0.6, 1.0), ph=rnd.uniform(0, 6.3),
+                              vx=rnd.uniform(-8, 8), delay=rnd.uniform(0, 0.4)))
+        links = [(i, j) for i in range(len(nodes)) for j in range(i + 1, len(nodes))
+                 if math.hypot(nodes[i]["tx"] - nodes[j]["tx"], nodes[i]["ty"] - nodes[j]["ty"]) < 0.09 * w]
+        clusters.append(dict(off=k * L / n_clusters, nodes=nodes, links=links,
+                             mode="drop" if k % 2 else "dissolve", cx=cxk + cw / 2, cy=cyk + ch / 2))
+
+    ease = lambda x: 0.0 if x <= 0 else 1.0 if x >= 1 else x * x * (3 - 2 * x)
+    FORM, HOLD_END, EXIT = 2.0, 15.0, 3.0
+    g = 2 * h / (2.4 ** 2)                                 # falls the full height in about 2.4 s
+
+    enc = subprocess.Popen(["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "gray", "-s", f"{w}x{h}",
+                            "-r", str(fps), "-i", "-", "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p", path],
+                           stdin=subprocess.PIPE)
+    for fi in range(int(L * fps)):
+        t = fi / fps
+        buf = bytearray(w * h)
+
+        def add(x, y, v):
+            xi, yi = int(x), int(y)
+            if 0 <= xi < w and 0 <= yi < h:
+                i = yi * w + xi; nv = buf[i] + v
+                buf[i] = 255 if nv > 255 else nv
+
+        for c in clusters:
+            u = (t - c["off"]) % L
+            if u >= HOLD_END + EXIT:
+                continue
+            pts = []
+            for nd in c["nodes"]:
+                dx = math.sin(u * 0.7 + nd["ph"]) * 0.006 * w
+                dy = math.cos(u * 0.55 + nd["ph"]) * 0.005 * w
+                hx, hy = nd["tx"] + dx, nd["ty"] + dy
+                e = ease((u - nd["delay"]) / FORM)
+                x, y = nd["sx"] + (hx - nd["sx"]) * e, nd["sy"] + (hy - nd["sy"]) * e
+                a, r = ease((u - nd["delay"]) / (FORM * 0.6)), nd["r"]
+                s_ = u - HOLD_END - nd["delay"] * 0.5
+                if s_ > 0:
+                    if c["mode"] == "drop":
+                        y += 0.5 * g * s_ * s_; x += nd["vx"] * s_
+                        a *= max(0.0, 1 - s_ / EXIT) * (1 - ease((y - 0.8 * h) / (0.2 * h)))
+                    else:
+                        k_ = ease(s_ / (EXIT * 0.85))
+                        x += (x - c["cx"]) * 0.6 * k_; y += (y - c["cy"]) * 0.6 * k_
+                        a *= 1 - k_; r *= 1 - 0.5 * k_
+                pts.append((x, y, a * nd["b"], r))
+            # links fade in after the gather and out first when the constellation leaves
+            la = ease((u - FORM) / 1.4) * (1 - ease((u - HOLD_END) / 0.8))
+            if la > 0:
+                for i, j in c["links"]:
+                    x1, y1, a1, _ = pts[i]; x2, y2, a2, _ = pts[j]
+                    v = int(70 * la * min(a1, a2))
+                    if v <= 0:
+                        continue
+                    n = int(max(abs(x2 - x1), abs(y2 - y1))) + 1
+                    for q in range(n + 1):
+                        add(x1 + (x2 - x1) * q / n, y1 + (y2 - y1) * q / n, v)
+            for x, y, a, r in pts:
+                if a <= 0.01:
+                    continue
+                for yy in range(int(y - r - 1), int(y + r + 2)):
+                    for xx in range(int(x - r - 1), int(x + r + 2)):
+                        e2 = r + 0.5 - math.hypot(xx - x, yy - y)
+                        if e2 > 0:
+                            add(xx, yy, int(255 * a * min(1.0, e2)))
+        enc.stdin.write(bytes(buf))
+    enc.stdin.close()
+    if enc.wait() != 0:
+        die("Couldn't render the background nodes.")
+
+
 # ---------------------------------------------------------------- main
 
 def pick_inputs(folder):
@@ -294,15 +387,17 @@ def main():
     if b:
         make_png(border, fw + 2 * b, fh + 2 * b, RADIUS + b, GLOW_RGB)
 
-    # two node layers drifting at different speeds (far: small and dim, near: brighter, linked)
-    layers = []
+    # background: a faint drifting dust layer + the animated constellations (rendered at half size)
+    layers, anim = [], None
     if not a.no_nodes:
-        print("Drawing the background nodes...")
-        for name, amp, seed, count, link, dot, dot_a, line_a in (("far", 40, 7, 130, 170, 1.8, 0.50, 0.12),
-                                                                 ("near", 90, 33, 50, 320, 3.4, 1.0, 0.32)):
-            pth = os.path.join(tmp, name + ".pgm")
-            make_nodes(pth, OUT_W + 2 * amp, OUT_H + 2 * amp, seed, count, link, dot, dot_a, line_a)
-            layers.append((pth, amp))
+        print("Animating the background nodes...")
+        amp = 40
+        pth = os.path.join(tmp, "dust.pgm")
+        make_nodes(pth, OUT_W + 2 * amp, OUT_H + 2 * amp, 7, 110, 170, 1.6, 0.40, 0.08)
+        layers.append((pth, amp))
+        anim = os.path.join(tmp, "constellations.mp4")
+        bands = [(4, fy // 2 - 4), ((fy + ph) // 2 + 4, OUT_H // 2 - 4)]     # top and bottom strips, half scale
+        animate_nodes(anim, OUT_W // 2, OUT_H // 2, bands)
 
     mono = os.path.join(HERE, "assets", "tg-monogram.png")
     use_mono = not a.no_watermark and os.path.exists(mono)
@@ -322,6 +417,8 @@ def main():
     li = []
     for pth, _ in layers:
         cmd += ["-loop", "1", "-framerate", str(OUT_FPS), "-i", pth]; li.append(idx); idx += 1
+    if anim:
+        cmd += ["-stream_loop", "-1", "-i", anim]; ai = idx; idx += 1
 
     f = [f"color=c={NIGHT}:s={OUT_W}x{OUT_H}:r={OUT_FPS}[bg]"]
     last = "bg"
@@ -332,6 +429,12 @@ def main():
               f"[g{n}][a{n}]alphamerge[n{n}]",
               f"[{last}][n{n}]overlay=0:0[l{n}]"]
         last = f"l{n}"
+    if anim:
+        f += [f"[{ai}:v]fps={OUT_FPS},scale={OUT_W}:{OUT_H}:flags=bicubic,format=gray[am]",
+              f"color=c=0x{GLOW_RGB[0]:02X}{GLOW_RGB[1]:02X}{GLOW_RGB[2]:02X}:s={OUT_W}x{OUT_H}:r={OUT_FPS},format=rgba[ga]",
+              "[ga][am]alphamerge[an]",
+              f"[{last}][an]overlay=0:0[la]"]
+        last = "la"
     cam_ar = fw / fh
     f += [
         f"[0:v]fps={OUT_FPS},crop={rw}:{rh}:{rx}:{ry},scale={sw}:{sh}:flags=lanczos,setsar=1,format=rgba[clipr]",

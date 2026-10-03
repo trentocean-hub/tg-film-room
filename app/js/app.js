@@ -4,10 +4,9 @@
   const court = $('#court'), draw = $('#draw'), cx = draw.getContext('2d'), kx = court.getContext('2d');
   const FPS = 30, FRAME = 1 / FPS;
   const NIGHT = 'rgba(14,21,17,0.64)';
-  const HALO = 'rgba(14,21,17,0.72)';   // dark edge under every mark so it reads on bright or busy film
 
   let W = 0, H = 0, dpr = 1, aspect = 16 / 9;
-  let tool = 'pen', color = '#A4F2C4';
+  let tool = 'pen', color = '#8CC4A4';
   let anns = [], history = [], cur = null, penSeen = false, fade = 1, hasClip = false;
 
   /* ---------- sizing ---------- */
@@ -55,10 +54,10 @@
   const baseW = () => Math.max(2.5, W * 0.0042);
   const px = p => ({ x: p.x * W, y: p.y * H });
 
-  function strokePts(pts, col, extra = 0) {
+  function strokePts(pts, col) {
     if (!pts.length) return;
     cx.strokeStyle = col; cx.lineCap = 'round'; cx.lineJoin = 'round';
-    const P = pts.map(p => ({ ...px(p), w: baseW() * (0.55 + (p.p ?? .5) * 0.9) + extra }));
+    const P = pts.map(p => ({ ...px(p), w: baseW() * (0.55 + (p.p ?? .5) * 0.9) }));
     if (P.length === 1) { cx.fillStyle = col; cx.beginPath(); cx.arc(P[0].x, P[0].y, P[0].w / 2, 0, Math.PI * 2); cx.fill(); return; }
     let prev = P[0];
     for (let i = 1; i < P.length; i++) {
@@ -70,17 +69,17 @@
     }
   }
 
-  function drawAnn(a, halo) {
-    const w = baseW(), col = halo ? HALO : a.c, extra = halo ? w * 1.4 : 0;
+  function drawAnn(a) {
+    const w = baseW();
     if (a.t === 'pen') {
-      strokePts(a.pts, col, extra);
+      strokePts(a.pts, a.c);
     } else if (a.t === 'ring') {
       const c = px(a.a), rx = a.r * W;
-      cx.strokeStyle = col; cx.lineWidth = w * 1.15 + extra;
+      cx.strokeStyle = a.c; cx.lineWidth = w * 1.15;
       cx.beginPath(); cx.ellipse(c.x, c.y, rx, rx * 0.38, 0, 0, Math.PI * 2); cx.stroke();
     } else if (a.t === 'spot') {
       const c = px(a.a), r = a.r * W;
-      cx.strokeStyle = col; cx.lineWidth = w * .9 + extra;
+      cx.strokeStyle = a.c; cx.lineWidth = w * .9;
       cx.beginPath(); cx.arc(c.x, c.y, r, 0, Math.PI * 2); cx.stroke();
     }
   }
@@ -95,7 +94,6 @@
       for (const s of spots) { const c = px(s.a); cx.moveTo(c.x + s.r * W, c.y); cx.arc(c.x, c.y, s.r * W, 0, Math.PI * 2); }
       cx.fill('evenodd');
     }
-    for (const a of list) drawAnn(a, true);
     for (const a of list) drawAnn(a);
     cx.globalAlpha = 1;
   }

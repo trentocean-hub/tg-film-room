@@ -15,7 +15,7 @@ Trenton Gibson's film-breakdown tools. Trenton is a pro basketball player (#33, 
 
 ## How the two halves connect (keep these in sync)
 
-- **Final layout.** Face cam on the left, the whole film on the right, on the night ground with drifting forest-glow nodes (`make_nodes`, layout constants `MARGIN`/`GAP`/`CAM_AR`/`RADIUS` in `pipeline/make_video.py`). Nothing may sit on top of the film in the app: the jog wheel lives in `.dock`, beside the stage, so it never shows up in the video.
+- **Final layout.** Face cam on the left, the whole film on the right, on the night ground with a faint dust layer (`make_nodes`) and node constellations that gather, link, then dissolve or drop (`animate_nodes`, layout constants `MARGIN`/`GAP`/`CAM_AR`/`RADIUS` in `pipeline/make_video.py`). Nothing may sit on top of the film in the app: the jog wheel lives in `.dock`, beside the stage, so it never shows up in the video.
 - **Sync mark.** Tapping it plays a 1 kHz beep for 0.2 s and fills the stage with bone (#EEE7D8) for 0.2 s. The pipeline finds the beep in both recordings to line them up, and finds the bone rectangle to know where the video sits on screen. If you change the beep or the flash, change `find_beep` / `find_flash` too.
 
 ## Brand rules (Evergreen, from docs/brand)

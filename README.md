@@ -3,7 +3,7 @@
 Draw on game film with your Apple Pencil, then let the edit happen in code.
 
 1. **Film** – open the app on your iPad, start a screen recording, start your camera, tap **Sync mark**, and break down the play.
-2. **Edit** – put the screen recording and the camera file in `pipeline/input/` and run one command. Out comes a 1080p video with you on the left, the full film on the right, drifting nodes behind, the TG monogram, and clean audio.
+2. **Edit** – put the screen recording and the camera file in `pipeline/input/` and run one command. Out comes a 1080p video with you on the left, the full film on the right, animated nodes behind, the TG monogram, and clean audio.
 
 ## First-time setup (once, in Claude Code)
 
@@ -39,7 +39,7 @@ Useful options:
 | `--audio screen` | Use the iPad's microphone instead of the camera's |
 | `--camera-sync 12.4` | Tell it when you tapped Sync mark in the camera file, if the beep wasn't heard |
 | `--no-watermark` | Leave the TG monogram off |
-| `--no-nodes` | Plain background, no drifting nodes |
+| `--no-nodes` | Plain background, no animated nodes |
 
 ## Brand
 
